@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>樂透開獎</title>
+<meta name="description" content="手機連線樂透：選號投注，主持人開球，大家手機即時對獎">
+<style>*,*::before,*::after{box-sizing:border-box}body{margin:0}[hidden]{display:none!important}img{max-width:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Noto+Sans+TC:wght@400;700;900&display=swap">
+<style>
+/* Layout: drum + drawn-ball row on top, phone ticket below; #screen widens drum beside winners */
+:root{
+  --bg:#F3F4F5; --surface:#FFFFFF; --ink:#26282A; --muted:#6B7075; --line:#D6D8D9;
+  --orange:#FF801E; --orange-ink:#B85000; --on-orange:#2A1300;
+  --blue:#00A3E0; --blue-ink:#0073A8; --on-blue:#00202D; --blue-soft:#DDF3FB;
+  --special:#404040; --on-special:#FFFFFF; --drum:#E8EAEC; --drum-rim:#B9BDC1;
+  --display:"Bungee","Arial Black",system-ui,sans-serif;
+  --body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#16181A; --surface:#212427; --ink:#ECEDEE; --muted:#9AA0A6; --line:#3A3E42;
+  --orange-ink:#FF9C50; --blue-ink:#4CC6F0; --blue-soft:#0D3343;
+  --special:#ECEDEE; --on-special:#16181A; --drum:#1C1F22; --drum-rim:#4A4F54; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#16181A; --surface:#212427; --ink:#ECEDEE; --muted:#9AA0A6; --line:#3A3E42;
+  --orange-ink:#FF9C50; --blue-ink:#4CC6F0; --blue-soft:#0D3343;
+  --special:#ECEDEE; --on-special:#16181A; --drum:#1C1F22; --drum-rim:#4A4F54; color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:560px;margin:0 auto;padding-block:16px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:16px}
+body.screen .wrap{max-width:1280px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-size:22px;line-height:1}
+.brand b{color:var(--orange-ink);font-weight:400}.brand i{color:var(--blue-ink);font-style:normal}
+.sub{color:var(--muted);font-size:13px}
+.note{font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.note.warn{border-color:var(--orange);color:var(--ink)}
+button{font:inherit;cursor:pointer;border:0;border-radius:10px;padding:10px 16px;font-weight:700}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+button:disabled{opacity:.45;cursor:default}
+.btn-main{background:var(--orange);color:var(--on-orange)}
+.btn-blue{background:var(--blue);color:var(--on-blue)}
+.btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.host{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--surface);border:1px dashed var(--orange);border-radius:12px;padding:10px 12px}
+.host .lbl{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--orange-ink);margin-right:auto}
+/* stage */
+.stage{display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.phase{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.phase b{color:var(--ink)}
+.drumbox{position:relative;width:100%;max-width:360px;aspect-ratio:1;margin:0 auto}
+body.screen .drumbox{max-width:520px}
+#drum{width:100%;height:100%;display:block}
+.row{display:flex;justify-content:center;align-items:center;gap:5px;flex-wrap:wrap}
+.row .plus{font-family:var(--display);color:var(--muted);font-size:18px}
+.ball{width:38px;height:38px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-size:15px;font-variant-numeric:tabular-nums;flex:none}
+body.screen .row .ball{width:clamp(48px,6vw,84px);height:clamp(48px,6vw,84px);font-size:clamp(20px,2.6vw,36px)}
+.ball.o{background:var(--orange);color:var(--on-orange)}
+.ball.b{background:var(--blue);color:var(--on-blue)}
+.ball.s{background:var(--special);color:var(--on-special)}
+.ball.empty{background:transparent;border:2px dashed var(--line);color:var(--muted)}
+.ball.new{animation:pop .55s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.2) translateY(-30px)}to{transform:none}}
+/* ticket / picker */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.panel h2{margin:0;font-size:18px;text-wrap:balance}
+.panel input{font:inherit;font-size:17px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.nums{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.nums button{aspect-ratio:1;max-width:100%;padding:0;border-radius:50%;background:var(--bg);color:var(--ink);font-family:var(--display);font-weight:400;font-size:clamp(13px,3.6vw,17px);font-variant-numeric:tabular-nums}
+.nums button.on{background:var(--orange);color:var(--on-orange)}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.acts .grow{flex:1}
+.ticket .row{justify-content:flex-start}
+.ticket .ball{background:var(--bg);color:var(--ink)}
+.ticket .ball.hit{background:var(--orange);color:var(--on-orange)}
+.ticket .ball.sp{background:var(--special);color:var(--on-special)}
+.prize{font-family:var(--display);font-size:30px;color:var(--orange-ink);line-height:1.1}
+.prize small{display:block;font-family:var(--body);font-size:14px;color:var(--ink);font-weight:700}
+/* winners */
+.board h3{margin:0 0 8px;font-size:14px;letter-spacing:.04em;color:var(--muted)}
+.rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rank li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;background:var(--surface);border-radius:10px;padding:8px 12px;font-variant-numeric:tabular-nums}
+.rank li.me{outline:2px solid var(--blue)}
+.rank .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.tag{font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.tag.w{background:var(--orange);color:var(--on-orange)}
+.tag.r{background:var(--blue-soft);color:var(--blue-ink)}
+.tag.z{color:var(--muted)}
+body.screen .scr{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:20px;align-items:start}
+@media (max-width:760px){body.screen .scr{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){.ball.new{animation:none}}
+.cfg{display:flex;flex-direction:column;gap:10px}
+.cfg label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);font-weight:700}
+.cfg input,.cfg textarea,.cfg select{font:inherit;font-size:16px;font-weight:400;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.cfg textarea{resize:vertical;min-height:220px;line-height:1.5}
+.cfg .err{color:var(--orange-ink);font-size:13px;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand" id="brand" style="color:var(--orange-ink)">樂透開獎</div>
+    <div class="sub" id="subt"></div>
+  </header>
+  <div id="msg" class="note">連線中…</div>
+  <div id="host" class="host" hidden></div>
+  <div id="settings"></div>
+  <div class="scr">
+    <section class="stage" aria-label="開獎">
+      <div class="phase" id="phase"></div>
+      <div class="drumbox"><canvas id="drum" aria-label="搖獎機"></canvas></div>
+      <div class="row" id="result" aria-live="polite"></div>
+    </section>
+    <div id="side" style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div id="panel"></div>
+      <div id="board"></div>
+    </div>
+  </div>
+  <a id="modeLink" class="sub" href="#screen">大螢幕模式（投影用）→</a>
+</div>
+
+<script>
+const TOPIC="partygame-lotto-h4n9c2x6";
+/* ---------- ntfy 即時連線（免登入） ---------- */
+const NTFY="https://ntfy.sh";
+const TP=TOPIC+"-p";
+let isHost=location.hash==="#host",demo=false,es=null;
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const uid=(()=>{let id=store.get("party:id");if(!id){id="p"+Math.random().toString(36).slice(2,12);store.set("party:id",id)}return id})();
+async function pub(topic,obj){
+  if(demo)return true;
+  for(let i=0;i<4;i++){
+    try{const r=await fetch(NTFY+"/"+topic,{method:"POST",body:JSON.stringify(obj)});if(r.ok)return true;if(r.status!==429)return false}catch(e){}
+    await new Promise(r=>setTimeout(r,3000*(i+1)));
+  }
+  return false;
+}
+function connect(onGame,onPlayer){
+  let opened=false;
+  const t=setTimeout(()=>{if(!opened)offerDemo()},5000);
+  es=new EventSource(`${NTFY}/${TOPIC},${TP}/sse?since=12h`);
+  es.onopen=()=>{opened=true;clearTimeout(t);if(!demo)showMsg("")};
+  es.onerror=()=>{if(opened&&!demo)showMsg("連線中斷，正在自動重新連線…",true)};
+  es.onmessage=e=>{
+    let m,d;try{m=JSON.parse(e.data)}catch(x){return}
+    if(m.event==="open"){opened=true;clearTimeout(t);if(!demo)showMsg("");return}
+    if(m.event!=="message"||!m.message)return;
+    try{d=JSON.parse(m.message)}catch(x){return}
+    if(!d||typeof d!=="object"||typeof d.round!=="string"||typeof d.t!=="number")return;
+    if(m.topic===TOPIC)onGame(d);else if(m.topic===TP&&typeof d.id==="string")onPlayer(d);
+  };
+}
+/* 預覽視窗等沙盒環境會擋表單送出：改由程式觸發，所有環境都能用 */
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest('button[type="submit"]');
+  if(b&&b.form){e.preventDefault();b.form.dispatchEvent(new Event("submit",{cancelable:true}))}});
+document.addEventListener("keydown",e=>{if(e.key!=="Enter"||e.isComposing)return;const t=e.target;
+  if(t&&t.tagName==="INPUT"&&t.form){e.preventDefault();t.form.dispatchEvent(new Event("submit",{cancelable:true}))}});
+function offerDemo(){
+  const m=document.querySelector("#msg");m.hidden=false;m.classList.add("warn");
+  m.innerHTML=`連不上遊戲伺服器（網路被擋或沒有網路），畫面會自動重試。<br><button class="btn-main" id="demoBtn" style="margin-top:8px">單機試玩（只在這台裝置，不同步）</button>`;
+  m.querySelector("#demoBtn").addEventListener("click",()=>{demo=true;isHost=true;try{es&&es.close()}catch(e){}
+    showMsg("單機試玩中：主持人按鈕和你的卡在同一個畫面，不會同步到其他手機。");renderAll();});
+}
+function showMsg(t,warn){const m=document.querySelector("#msg");m.hidden=!t;m.textContent=t||"";m.classList.toggle("warn",!!warn)}
+
+let MAXN=30,BR=0.058;const PICK=6,DRAW=6;
+const DEF_TIERS=["頭獎","貳獎","參獎","普獎"];let TIERS=DEF_TIERS;
+const CFG_KEY="partylotto:cfg";let cfg=null;
+const RANGES=[25,30,35,38,42,49];
+function loadCfg(key,def){try{const c=JSON.parse(store.get(key)||"null");return c&&typeof c==="object"?{...def,...c}:{...def}}catch(e){return {...def}}}
+function applyHeader(title,sub){$("#brand").textContent=title;$("#subt").textContent=sub;$("#subt").hidden=!sub;document.title=title}
+function closeCfg(){$("#settings").innerHTML=""}
+cfg=loadCfg(CFG_KEY,{title:"樂透開獎",sub:"",maxn:30,prizes:DEF_TIERS});
+function setRange(n){MAXN=RANGES.includes(n)?n:30;BR=MAXN<=30?0.058:MAXN<=38?0.052:0.045}
+function hdr(){const t=game?.title||(isHost?cfg.title:"樂透開獎"),s0=game?(game.sub||""):(isHost?cfg.sub:"");
+  applyHeader(t,(s0?s0+"・":"")+`${MAXN} 選 6・中 3 個就有獎`)}
+function openCfg(){
+  const lv=["對中 6 個","對中 5 個","對中 4 個","對中 3 個"];
+  $("#settings").innerHTML=`<form class="panel cfg" id="cfgf"><h2>遊戲設定</h2>
+    <label>標題<input id="cTitle" maxlength="20" value="${esc(cfg.title)}"></label>
+    <label>副標（可留空）<input id="cSub" maxlength="40" value="${esc(cfg.sub)}"></label>
+    <label>號碼範圍<select id="cMax">${RANGES.map(n=>`<option value="${n}" ${n===cfg.maxn?"selected":""}>1–${n}${n===30?"（建議，中獎人數多）":n===49?"（同大樂透，很難中）":""}</option>`).join("")}</select></label>
+    ${lv.map((l,i)=>`<label>${l} 的獎項名稱<input id="cP${i}" maxlength="16" value="${esc(cfg.prizes[i]||DEF_TIERS[i])}"></label>`).join("")}
+    <div class="sub" id="cInfo"></div>
+    <div class="acts"><button class="btn-main" type="submit">儲存設定</button><button type="button" class="btn-ghost" id="cClose">關閉</button></div>
+    <p class="sub" style="margin:0">設定存在這台裝置，按下一次「開放投注／新的一局」時套用到大家的畫面。</p></form>`;
+  $("#cClose").addEventListener("click",closeCfg);
+  $("#cfgf").addEventListener("submit",e=>{e.preventDefault();
+    cfg={title:$("#cTitle").value.trim()||"樂透開獎",sub:$("#cSub").value.trim(),maxn:+$("#cMax").value,
+      prizes:[0,1,2,3].map(i=>$("#cP"+i).value.trim()||DEF_TIERS[i])};
+    store.set(CFG_KEY,JSON.stringify(cfg));
+    $("#cInfo").innerHTML=`<b>已儲存</b>，按「${game?"新的一局":"開放投注"}」後套用。`;
+    if(!game){setRange(cfg.maxn);fillDrum([]);hdr()}
+  });
+}
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+const cls=n=>n%2?"o":"b";
+const isScreen=()=>location.hash==="#screen"||location.hash==="#host";
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function rnd(n){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}
+function quickPick(){const a=[...Array(MAXN)].map((_,i)=>i+1);for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a.slice(0,PICK).sort((x,y)=>x-y)}
+
+let game=null,players=[],pmap={},busy=false,confirmClose=false,confirmNew=false,confirmEnd=false,moreOpen=false;
+let picks=[],editing=false,localTicket=null,writeFailed=false;
+let shown=0,curRound=null,queue=[],animating=false,newestShown=-1;
+
+function judge(p,balls){
+  const m=p.filter(n=>balls.includes(n)).length;
+  const t=balls.length>=DRAW&&m>=3?6-m:null;
+  return {m,s:false,t};
+}
+const revealed=()=>(game?.balls||[]).slice(0,shown);
+function myTicket(){
+  if(!game)return null;
+  const p=uid&&players.find(x=>x.id===uid&&x.round===game.round&&Array.isArray(x.picks));
+  if(p)return {name:p.name,picks:p.picks,shared:true};
+  if(localTicket&&localTicket.round===game.round)return {...localTicket,shared:false};
+  return null;
+}
+
+/* ---------- drum (canvas) ---------- */
+const cv=$("#drum"),ctx=cv.getContext("2d");
+let drumBalls=[],spinUntil=0,popBall=null,colors={};
+function readColors(){const cs=getComputedStyle(document.documentElement);
+  for(const k of["orange","on-orange","blue","on-blue","drum","drum-rim","ink","muted","special","on-special"])colors[k]=cs.getPropertyValue("--"+k).trim()}
+function sizeCanvas(){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=Math.max(1,r.width*d);cv.height=Math.max(1,r.height*d)}
+function fillDrum(exclude){
+  const R=0.42,br=BR;drumBalls=[];
+  for(let n=1;n<=MAXN;n++){if(exclude.includes(n))continue;
+    const a=Math.random()*Math.PI*2,d=Math.random()*(R-br);
+    drumBalls.push({n,x:0.5+Math.cos(a)*d,y:0.55+Math.abs(Math.sin(a))*d*0.6,vx:(Math.random()-.5)*.004,vy:0})}
+}
+function step(){
+  const C={x:.5,y:.5},R=.42,br=BR,now=performance.now(),spinning=now<spinUntil;
+  for(const b of drumBalls){
+    b.vy+=spinning?0.0004:0.0006;
+    if(spinning){b.vx+=(Math.random()-.5)*.006;b.vy+=(Math.random()-.5)*.006;if(b.y>.7)b.vy-=.0035*Math.random()}
+    b.vx*=.995;b.vy*=.995;b.x+=b.vx;b.y+=b.vy;
+    const dx=b.x-C.x,dy=b.y-C.y,d=Math.hypot(dx,dy),lim=R-br;
+    if(d>lim){const nx=dx/d,ny=dy/d;b.x=C.x+nx*lim;b.y=C.y+ny*lim;const dot=b.vx*nx+b.vy*ny;if(dot>0){b.vx-=1.8*dot*nx;b.vy-=1.8*dot*ny}}
+  }
+  for(let i=0;i<drumBalls.length;i++)for(let j=i+1;j<drumBalls.length;j++){
+    const a=drumBalls[i],b=drumBalls[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy),min=br*2;
+    if(d>0&&d<min){const nx=dx/d,ny=dy/d,o=(min-d)/2;a.x-=nx*o;a.y-=ny*o;b.x+=nx*o;b.y+=ny*o;
+      const rv=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;if(rv<0){const k=rv*.9;a.vx+=k*nx;a.vy+=k*ny;b.vx-=k*nx;b.vy-=k*ny}}}
+}
+function drawBall(x,y,r,n,special){
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle=special?colors.special:(n%2?colors.orange:colors.blue);ctx.fill();
+  ctx.fillStyle=special?colors["on-special"]:(n%2?colors["on-orange"]:colors["on-blue"]);
+  ctx.font=`${Math.round(r*1.05)}px Bungee, "Arial Black", sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(pad(n),x,y+r*.06);
+}
+function frame(){
+  const W=cv.width,H=cv.height;if(!W)return requestAnimationFrame(frame);
+  if(!reduce||performance.now()<spinUntil)step();
+  ctx.clearRect(0,0,W,H);
+  ctx.beginPath();ctx.arc(W*.5,H*.5,W*.44,0,Math.PI*2);ctx.fillStyle=colors.drum;ctx.fill();
+  ctx.lineWidth=W*.012;ctx.strokeStyle=colors["drum-rim"];ctx.stroke();
+  ctx.fillStyle=colors["drum-rim"];ctx.fillRect(W*.44,H*.02,W*.12,H*.06);
+  for(const b of drumBalls)drawBall(b.x*W,b.y*H,W*BR,b.n,false);
+  if(popBall){const t=Math.min(1,(performance.now()-popBall.t0)/700),e=1-Math.pow(1-t,3);
+    const y=H*(.5-.45*e),r=W*(BR+.06*e);drawBall(W*.5,y,r,popBall.n,popBall.special);if(t>=1&&performance.now()-popBall.t0>1100)popBall=null}
+  requestAnimationFrame(frame);
+}
+
+function syncDrum(){
+  if(!game){drumBalls.length||fillDrum([]);return}
+  if(game.round!==curRound){curRound=game.round;shown=(game.balls||[]).length;queue=[];newestShown=-1;fillDrum(game.balls||[]);return}
+  const balls=game.balls||[];
+  if(balls.length<shown){shown=balls.length;fillDrum(balls);return}
+  for(let i=shown+queue.length;i<balls.length;i++)queue.push(i);
+  runQueue();
+}
+async function runQueue(){
+  if(animating||!queue.length)return;animating=true;renderHost();
+  while(queue.length){
+    const i=queue.shift(),n=game.balls[i];
+    if(!reduce){spinUntil=performance.now()+2200;await new Promise(r=>setTimeout(r,2200))}
+    drumBalls=drumBalls.filter(b=>b.n!==n);
+    popBall={n,special:false,t0:performance.now()};
+    if(!reduce)await new Promise(r=>setTimeout(r,700));
+    shown=i+1;newestShown=i;renderAll();
+    if(queue.length&&!reduce)await new Promise(r=>setTimeout(r,500));
+  }
+  animating=false;renderHost();
+}
+
+/* ---------- DOM render ---------- */
+function renderResult(){
+  const b=revealed();let h="";
+  for(let i=0;i<DRAW;i++){
+    h+=b[i]!=null?`<span class="ball ${cls(b[i])} ${i===newestShown?"new":""}" title="第${i+1}顆">${pad(b[i])}</span>`
+      :`<span class="ball empty">${i+1}</span>`}
+  $("#result").innerHTML=h;
+  if(b.length===DRAW){const s=b.slice().sort((x,y)=>x-y).map(pad).join(" ");$("#result").insertAdjacentHTML("beforeend",`<div class="sub" style="width:100%;text-align:center">大小順序：${s}</div>`)}
+  newestShown=-1;
+}
+function renderPhase(){
+  const n=players.filter(p=>game&&p.round===game.round&&Array.isArray(p.picks)).length;
+  const t=!game?"等待主持人開局":game.phase==="betting"?"<b>投注中</b>・選 6 個號碼送出":game.phase==="drawing"?`<b>開獎中</b>・已開 ${shown} / ${DRAW}`:game.phase==="ended"?"<b>本局已提前結束</b>":"<b>本局開獎完畢</b>";
+  $("#phase").innerHTML=`<span>${t}</span><span>${n} 人投注</span>`;
+}
+function renderPanel(){
+  const el=$("#panel");
+  if(isScreen()){el.innerHTML="";return}
+  if(!game){el.innerHTML=`<div class="panel"><h2>${isHost?"按上方「開放投注」開始":"等主持人開放投注"}</h2><p class="sub" style="margin:0">開放後這頁會自動出現選號盤，不用重新整理。</p></div>`;return}
+  const tk=myTicket();
+  if(game.phase==="betting"&&(!tk||editing)){
+    const keepName=$("#nm")?.value??(tk?.name||store.get("partylotto:name")||"");
+    el.innerHTML=`<form class="panel" id="betf"><h2>選 6 個號碼（1–${MAXN}）</h2>
+      <input id="nm" maxlength="12" placeholder="你的名字" value="${esc(keepName)}" autocomplete="nickname" required aria-label="你的名字">
+      <div class="nums" style="grid-template-columns:repeat(${MAXN>42||MAXN%7===0?7:6},minmax(0,1fr))">${[...Array(MAXN)].map((_,i)=>`<button type="button" data-n="${i+1}" class="${picks.includes(i+1)?"on":""}" aria-pressed="${picks.includes(i+1)}">${pad(i+1)}</button>`).join("")}</div>
+      <div class="acts"><button type="button" class="btn-ghost" id="qp">電腦選號</button><button type="button" class="btn-ghost" id="clr">清除</button>
+      <button type="submit" class="btn-main grow" ${picks.length===PICK?"":"disabled"}>送出投注（${picks.length}/6）</button></div></form>`;
+    el.querySelectorAll(".nums button").forEach(b=>b.addEventListener("click",()=>{const n=+b.dataset.n;
+      if(picks.includes(n))picks=picks.filter(x=>x!==n);else if(picks.length<PICK)picks=[...picks,n].sort((x,y)=>x-y);renderPanel()}));
+    $("#qp").addEventListener("click",()=>{picks=quickPick();renderPanel()});
+    $("#clr").addEventListener("click",()=>{picks=[];renderPanel()});
+    $("#betf").addEventListener("submit",e=>{e.preventDefault();submitBet($("#nm").value.trim())});
+    return;
+  }
+  if(!tk){el.innerHTML=`<div class="panel"><h2>這一局你沒有投注</h2><p class="sub" style="margin:0">一起看開獎，下一局記得在投注時間內選號。</p></div>`;return}
+  const b=revealed(),r=judge(tk.picks,b),left=DRAW-b.length;
+  const hint=game.phase==="ended"?`<div class="sub"><b>本局已提前結束</b>，沒有開完球，這局不發獎。</div>`:b.length===DRAW?(r.t!=null?`<div class="prize">${TIERS[r.t]}！<small>中 ${r.m} 個，快舉手領獎！</small></div>`:`<div class="sub">這局沒中，下一局再拚。</div>`)
+    :b.length&&r.m<3&&3-r.m<=left?`<div class="sub"><b>再中 ${3-r.m} 個就有獎！</b>還剩 ${left} 顆球</div>`
+    :b.length&&r.m>=3?`<div class="sub"><b>已經中獎了！</b>再中越多獎越大</div>`:"";
+  el.innerHTML=`<div class="panel ticket"><div class="phase"><span><b>${esc(tk.name)}</b> 的彩券</span><span>中 ${r.m} 個</span></div>
+    <div class="row">${tk.picks.map(n=>`<span class="ball ${b.includes(n)?"hit":""}">${pad(n)}</span>`).join("")}</div>
+    ${hint}
+    ${!tk.shared?`<div class="note warn">${writeFailed?"沒有連線權限，":""}你的彩券只存在這支手機上，得獎名單不會顯示你。中獎時舉手就好。</div>`:""}
+    ${game.phase==="betting"?`<button class="btn-ghost" id="edit">修改號碼</button>`:""}</div>`;
+  $("#edit")?.addEventListener("click",()=>{editing=true;picks=tk.picks.slice();renderPanel()});
+}
+function renderBoard(){
+  const el=$("#board");if(!game){el.innerHTML="";return}
+  const b=revealed();
+  const rows=players.filter(p=>p.round===game.round&&Array.isArray(p.picks)).map(p=>({...p,...judge(p.picks,b)}));
+  if(!rows.length){el.innerHTML=`<section class="board"><h3>得獎名單</h3><div class="note">還沒有人投注。</div></section>`;return}
+  if(!b.length){el.innerHTML=`<section class="board"><h3>已投注 ${rows.length} 人</h3><ol class="rank">${rows.slice().sort((a,c)=>(a.t||0)-(c.t||0)).map(p=>`<li class="${p.id===uid?"me":""}"><span class="nm">${esc(p.name||"玩家")}</span><span class="tag z">已投注</span></li>`).join("")}</ol></section>`;return}
+  rows.sort((a,c)=>(a.t??99)-(c.t??99)||c.m-a.m);
+  const done=b.length===DRAW,wins=rows.filter(p=>p.t!=null).length,max=isScreen()?14:10;
+  let list=rows.slice(0,max);const mi=rows.findIndex(p=>p.id===uid);if(mi>=max)list.push(rows[mi]);
+  el.innerHTML=`<section class="board"><h3>${done?`得獎名單・${wins} 人中獎`:game.phase==="ended"?"本局提前結束・對中最多":"目前對中最多"}</h3><ol class="rank">${list.map(p=>`<li class="${p.id===uid?"me":""}"><span class="nm">${esc(p.name||"玩家")}</span>${
+    p.t!=null?`<span class="tag w">${TIERS[p.t]}</span>`:p.m?`<span class="tag r">中 ${p.m} 個</span>`:`<span class="tag z">—</span>`}</li>`).join("")}</ol></section>`;
+}
+function renderHost(){
+  const h=$("#host");h.hidden=!isHost;if(!isHost)return;
+  const ph=game?.phase,n=(game?.balls||[]).length,bet=players.filter(p=>game&&p.round===game.round&&Array.isArray(p.picks)).length;
+  let html=`<span class="lbl">主持人</span>`;
+  if(!game)html+=`<button class="btn-main" id="hOpen">開放投注</button>`;
+  else if(ph==="betting")html+=confirmClose?`<span class="lbl">截止後不能再改號碼（${bet} 人已投注）</span><button class="btn-main" id="hClose2">確定截止</button><button class="btn-ghost" id="hCancel">取消</button>`
+    :`<button class="btn-main" id="hClose" ${busy?"disabled":""}>截止投注，開始開獎</button>`;
+  else if(ph==="drawing")html+=`<button class="btn-main" id="hDraw" ${busy||animating?"disabled":""}>${n===DRAW-1?"開出最後一顆":`開出第 ${n+1} 顆球`}</button>`;
+  else html+=confirmNew?`<span class="lbl">開新一局會清掉本局結果</span><button class="btn-main" id="hNew2">確定新的一局</button><button class="btn-ghost" id="hCancel">取消</button>`
+    :`<button class="btn-main" id="hNew" ${busy||animating?"disabled":""}>新的一局</button>`;
+  if(game&&(ph==="betting"||ph==="drawing")){
+    if(confirmEnd)html=`<span class="lbl">提前結束本局？剩下的球不開，這局不發獎</span><button class="btn-main" id="hEnd2">確定結束</button><button class="btn-ghost" id="hCancel">取消</button>`;
+    else html+=moreOpen?`<button class="btn-ghost" id="hEnd">提前結束本局</button>`:`<button class="btn-ghost" id="hMore" aria-label="更多主持人選項" title="更多">⋯</button>`;
+  }
+  if(!confirmEnd&&!confirmClose&&!confirmNew)html+=`<button class="btn-ghost" id="hCfg">設定</button>`;
+  h.innerHTML=html;
+  h.querySelector("#hCfg")?.addEventListener("click",()=>{$("#settings").innerHTML?closeCfg():openCfg()});
+  on2("#hMore",()=>{moreOpen=true;renderHost()});on2("#hEnd",()=>{confirmEnd=true;renderHost()});
+  on2("#hEnd2",()=>{confirmEnd=moreOpen=false;writeGame({...game,phase:"ended"})});
+  function on2(id,f){h.querySelector(id)?.addEventListener("click",f)}
+  const on=(id,f)=>h.querySelector(id)?.addEventListener("click",f);
+  on("#hOpen",openRound);on("#hNew2",()=>{confirmNew=false;openRound()});on("#hNew",()=>{confirmNew=true;renderHost()});
+  on("#hClose",()=>{confirmClose=true;renderHost()});on("#hClose2",()=>{confirmClose=false;writeGame({...game,phase:"drawing"})});
+  on("#hCancel",()=>{confirmClose=confirmNew=confirmEnd=moreOpen=false;renderHost()});on("#hDraw",drawBall1);
+}
+function renderAll(){document.body.classList.toggle("screen",isScreen());hdr();
+  $("#modeLink").hidden=isHost;$("#modeLink").textContent=isScreen()?"← 回到我的彩券":"大螢幕模式（投影用）→";$("#modeLink").href=isScreen()?"#":"#screen";
+  renderHost();renderPhase();renderResult();renderPanel();renderBoard()}
+
+/* ---------- actions ---------- */
+async function writeGame(next){
+  if(busy)return;busy=true;renderHost();
+  next={...next,t:Date.now()};
+  if(await pub(TOPIC,next))onGame(next);else showMsg("沒送出去，網路不穩，請再按一次。",true);
+  busy=false;renderHost();
+}
+function openRound(){closeCfg();writeGame({round:"r"+Date.now(),phase:"betting",balls:[],startedAt:Date.now(),title:cfg.title,sub:cfg.sub,maxn:cfg.maxn,prizes:cfg.prizes})}
+function drawBall1(){const b=game.balls||[];if(b.length>=DRAW||animating)return;
+  const left=[...Array(MAXN)].map((_,i)=>i+1).filter(n=>!b.includes(n));
+  const nb=b.concat(left[rnd(left.length)]);writeGame({...game,balls:nb,phase:nb.length>=DRAW?"done":"drawing"})}
+async function submitBet(name){
+  if(!name||picks.length!==PICK)return;store.set("partylotto:name",name);
+  localTicket={name,picks:picks.slice(),round:game.round};editing=false;renderAll();
+  const rec={id:uid,name,picks:picks.slice(),round:game.round,t:Date.now()};
+  writeFailed=!(await pub(TP,rec));if(!writeFailed)onPlayer(rec);
+  renderAll();
+}
+
+/* ---------- boot ---------- */
+if(isHost)setRange(cfg.maxn);readColors();sizeCanvas();fillDrum([]);requestAnimationFrame(frame);renderAll();
+addEventListener("resize",sizeCanvas);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",readColors);
+new MutationObserver(readColors).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+addEventListener("hashchange",()=>location.reload());
+let rq=0;function schedule(){if(!rq)rq=requestAnimationFrame(()=>{rq=0;renderAll()})}
+function onGame(d){
+  if(!Array.isArray(d.balls)||typeof d.phase!=="string")return;if(game&&d.t<game.t)return;
+  const prevRound=game?.round;game=d;
+  setRange(+d.maxn||30);TIERS=Array.isArray(d.prizes)&&d.prizes.length===4?d.prizes.map(String):DEF_TIERS;
+  if(game.round!==prevRound){picks=[];editing=false;confirmClose=confirmNew=confirmEnd=moreOpen=false}
+  syncDrum();schedule();
+}
+function onPlayer(d){if(!Array.isArray(d.picks))return;const o=pmap[d.id];if(o&&o.t>d.t)return;pmap[d.id]=d;players=Object.values(pmap);schedule()}
+connect(onGame,onPlayer);
+</script>
+</body>
+</html>
