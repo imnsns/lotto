@@ -107,6 +107,8 @@ body.screen .scr{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);
   <header class="top">
     <div class="brand" id="brand" style="color:var(--orange-ink)">樂透開獎</div>
     <div class="sub" id="subt"></div>
+    <button type="button" class="btn-ghost" id="sndBtn" style="padding:6px 12px;font-size:13px" aria-pressed="true">音效：開</button>
+    <button type="button" class="btn-ghost" id="bgmBtn" style="padding:6px 12px;font-size:13px" hidden>背景音樂：開</button>
   </header>
   <div id="msg" class="note">連線中…</div>
   <div id="host" class="host" hidden></div>
@@ -208,6 +210,50 @@ const pad=n=>String(n).padStart(2,"0");
 const cls=n=>n%2?"o":"b";
 const isScreen=()=>location.hash==="#screen"||location.hash==="#host";
 const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* ---------- 音效（Web Audio 即時合成，不需音檔） ---------- */
+let actx=null,soundOn=store.get("partylotto:sound")!=="off";
+function ac(){try{if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();if(actx.state==="suspended")actx.resume();return actx}catch(e){return null}}
+addEventListener("pointerdown",()=>{if(soundOn)ac()},{passive:true});
+function tone(f,t0,dur,type="sine",vol=.2,f2){const c=ac();if(!c||!soundOn)return;const o=c.createOscillator(),g=c.createGain();
+  o.type=type;o.frequency.setValueAtTime(f,c.currentTime+t0);if(f2)o.frequency.exponentialRampToValueAtTime(f2,c.currentTime+t0+dur);
+  g.gain.setValueAtTime(0.0001,c.currentTime+t0);g.gain.exponentialRampToValueAtTime(vol,c.currentTime+t0+.01);g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+t0+dur);
+  o.connect(g).connect(c.destination);o.start(c.currentTime+t0);o.stop(c.currentTime+t0+dur+.05)}
+function click(t0,vol){const c=ac();if(!c||!soundOn)return;const len=Math.floor(c.sampleRate*.03),buf=c.createBuffer(1,len,c.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3);
+  const src=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain();src.buffer=buf;f.type="bandpass";f.frequency.value=1800+Math.random()*2500;g.gain.value=vol;
+  src.connect(f).connect(g).connect(c.destination);src.start(c.currentTime+t0)}
+const sfx={
+  rattle(sec){bgmDuck(sec+1);for(let t=0;t<sec;t+=.04+Math.random()*.07)click(t,.25+.35*Math.sin(Math.PI*t/sec))},
+  pop(){tone(520,0,.18,"triangle",.25,1040);tone(1040,.12,.35,"sine",.18)},
+  hit(){[1319,1568,2093].forEach((f,i)=>tone(f,.35+i*.08,.3,"sine",.16))},
+  win(){[523,659,784,1047,784,1047].forEach((f,i)=>tone(f,i*.13,i===5?.7:.2,"square",.08));[523,659,784].forEach(f=>tone(f,.78,.7,"triangle",.1))},
+  tap(){tone(880,0,.06,"sine",.08)}
+};
+/* 背景音樂：只在主持人／大螢幕播放，輕柔循環 C–Am–F–G */
+let bgmOn=store.get("partylotto:bgm")!=="off",bgmGain=null,bgmTimer=null,bgmNext=0,bgmStep=0;
+const BGM_CH=[[60,64,67],[57,60,64],[53,57,60],[55,59,62]],BEAT=.6,BGM_VOL=.5;
+const mf=m=>440*Math.pow(2,(m-69)/12);
+function bnote(m,t,dur,type,vol){const c=actx;const o=c.createOscillator(),g=c.createGain();o.type=type;o.frequency.value=mf(m);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.03);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g).connect(bgmGain);o.start(t);o.stop(t+dur+.05)}
+function bgmTick(){const c=actx;if(!c||!bgmGain)return;
+  if(bgmNext<c.currentTime)bgmNext=c.currentTime+.05;
+  while(bgmNext<c.currentTime+.8){const bar=Math.floor(bgmStep/8)%4,e=bgmStep%8,ch=BGM_CH[bar],t=bgmNext;
+    if(e===0){bnote(ch[0]-24,t,BEAT*4,"sine",.09);ch.forEach(m=>bnote(m,t,BEAT*4,"triangle",.025))}
+    const arp=[ch[0],ch[1],ch[2],ch[0]+12,ch[2],ch[1],ch[2],ch[0]+12][e];bnote(arp+12,t,.5,"sine",e%2?.022:.035);
+    bgmStep++;bgmNext+=BEAT/2}}
+function bgmShould(){return bgmOn&&(isHost||isScreen())}
+function bgmUpdate(){const c=ac();if(!c)return;
+  if(!bgmGain){bgmGain=c.createGain();bgmGain.gain.value=0.0001;bgmGain.connect(c.destination)}
+  const want=bgmShould()&&c.state==="running";
+  bgmGain.gain.cancelScheduledValues(c.currentTime);bgmGain.gain.setTargetAtTime(want?BGM_VOL:0.0001,c.currentTime,.6);
+  if(want&&!bgmTimer)bgmTimer=setInterval(bgmTick,200);
+  if(!want&&bgmTimer){setTimeout(()=>{if(!bgmShould()){clearInterval(bgmTimer);bgmTimer=null}},2500)}}
+function bgmDuck(sec){if(!bgmGain||!bgmTimer)return;const c=actx,g=bgmGain.gain;g.cancelScheduledValues(c.currentTime);
+  g.setTargetAtTime(BGM_VOL*.35,c.currentTime,.15);g.setTargetAtTime(BGM_VOL,c.currentTime+sec,.5)}
+function setBgm(v){bgmOn=v;store.set("partylotto:bgm",v?"on":"off");const b=$("#bgmBtn");b.textContent="背景音樂："+(v?"開":"關");b.setAttribute("aria-pressed",v);bgmUpdate()}
+addEventListener("pointerdown",()=>{if(bgmShould()){const c=ac();if(c)c.resume().then(bgmUpdate)}},{passive:true});
+function setSound(v){soundOn=v;store.set("partylotto:sound",v?"on":"off");const b=$("#sndBtn");b.textContent="音效："+(v?"開":"關");b.setAttribute("aria-pressed",v);if(v){ac();sfx.tap()}}
 function rnd(n){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}
 function quickPick(){const a=[...Array(MAXN)].map((_,i)=>i+1);for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a.slice(0,PICK).sort((x,y)=>x-y)}
 
@@ -286,9 +332,10 @@ async function runQueue(){
   if(animating||!queue.length)return;animating=true;renderHost();
   while(queue.length){
     const i=queue.shift(),n=game.balls[i];
-    if(!reduce){spinUntil=performance.now()+2200;await new Promise(r=>setTimeout(r,2200))}
+    sfx.rattle(reduce?.6:2.2);if(!reduce){spinUntil=performance.now()+2200;await new Promise(r=>setTimeout(r,2200))}
     drumBalls=drumBalls.filter(b=>b.n!==n);
-    popBall={n,special:false,t0:performance.now()};
+    popBall={n,special:false,t0:performance.now()};sfx.pop();{const tk=isScreen()?null:myTicket();if(tk&&tk.picks.includes(n))sfx.hit();
+      if(tk&&i===DRAW-1&&judge(tk.picks,game.balls).t!=null)setTimeout(()=>sfx.win(),900)}
     if(!reduce)await new Promise(r=>setTimeout(r,700));
     shown=i+1;newestShown=i;renderAll();
     if(queue.length&&!reduce)await new Promise(r=>setTimeout(r,500));
@@ -379,7 +426,7 @@ function renderHost(){
   on("#hClose",()=>{confirmClose=true;renderHost()});on("#hClose2",()=>{confirmClose=false;writeGame({...game,phase:"drawing"})});
   on("#hCancel",()=>{confirmClose=confirmNew=confirmEnd=moreOpen=false;renderHost()});on("#hDraw",drawBall1);
 }
-function renderAll(){document.body.classList.toggle("screen",isScreen());hdr();
+function renderAll(){document.body.classList.toggle("screen",isScreen());$("#bgmBtn").hidden=!(isHost||isScreen());hdr();
   $("#modeLink").hidden=isHost;$("#modeLink").textContent=isScreen()?"← 回到我的彩券":"大螢幕模式（投影用）→";$("#modeLink").href=isScreen()?"#":"#screen";
   renderHost();renderPhase();renderResult();renderPanel();renderBoard()}
 
@@ -405,6 +452,8 @@ async function submitBet(name){
 /* ---------- boot ---------- */
 if(isHost)setRange(cfg.maxn,cfg.draw);readColors();sizeCanvas();fillDrum([]);requestAnimationFrame(frame);renderAll();
 addEventListener("resize",sizeCanvas);
+$("#bgmBtn").hidden=!(isHost||isScreen());$("#bgmBtn").textContent="背景音樂："+(bgmOn?"開":"關");$("#bgmBtn").setAttribute("aria-pressed",bgmOn);$("#bgmBtn").addEventListener("click",()=>setBgm(!bgmOn));
+$("#sndBtn").textContent="音效："+(soundOn?"開":"關");$("#sndBtn").setAttribute("aria-pressed",soundOn);$("#sndBtn").addEventListener("click",()=>setSound(!soundOn));
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change",readColors);
 new MutationObserver(readColors).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
 addEventListener("hashchange",()=>location.reload());
