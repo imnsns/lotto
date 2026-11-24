@@ -213,7 +213,7 @@ const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
 /* ---------- 音效（Web Audio 即時合成，不需音檔） ---------- */
 let actx=null,soundOn=store.get("partylotto:sound")!=="off";
 function ac(){try{if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();if(actx.state==="suspended")actx.resume();return actx}catch(e){return null}}
-addEventListener("pointerdown",()=>{if(soundOn)ac()},{passive:true});
+try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
 function tone(f,t0,dur,type="sine",vol=.2,f2){const c=ac();if(!c||!soundOn)return;const o=c.createOscillator(),g=c.createGain();
   o.type=type;o.frequency.setValueAtTime(f,c.currentTime+t0);if(f2)o.frequency.exponentialRampToValueAtTime(f2,c.currentTime+t0+dur);
   g.gain.setValueAtTime(0.0001,c.currentTime+t0);g.gain.exponentialRampToValueAtTime(vol,c.currentTime+t0+.01);g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+t0+dur);
@@ -252,7 +252,12 @@ function bgmUpdate(){const c=ac();if(!c)return;
 function bgmDuck(sec){if(!bgmGain||!bgmTimer)return;const c=actx,g=bgmGain.gain;g.cancelScheduledValues(c.currentTime);
   g.setTargetAtTime(BGM_VOL*.35,c.currentTime,.15);g.setTargetAtTime(BGM_VOL,c.currentTime+sec,.5)}
 function setBgm(v){bgmOn=v;store.set("partylotto:bgm",v?"on":"off");const b=$("#bgmBtn");b.textContent="背景音樂："+(v?"開":"關");b.setAttribute("aria-pressed",v);bgmUpdate()}
-addEventListener("pointerdown",()=>{if(bgmShould()){const c=ac();if(c)c.resume().then(bgmUpdate)}},{passive:true});
+/* 手機上 pointerdown 不算「使用者操作」，要在 touchend/click 時才能解鎖聲音 */
+function unlockAudio(){if(!soundOn&&!bgmShould())return;const c=ac();if(!c)return;
+  if(!c._u){c._u=1;c.onstatechange=()=>{if(bgmShould())bgmUpdate()};
+    try{const b=c.createBuffer(1,1,22050),src=c.createBufferSource();src.buffer=b;src.connect(c.destination);src.start(0)}catch(e){}}
+  c.resume().then(()=>{if(bgmShould())bgmUpdate()}).catch(()=>{})}
+for(const ev of["touchend","click","keydown","pointerup"])addEventListener(ev,unlockAudio,{passive:true,capture:true});
 function setSound(v){soundOn=v;store.set("partylotto:sound",v?"on":"off");const b=$("#sndBtn");b.textContent="音效："+(v?"開":"關");b.setAttribute("aria-pressed",v);if(v){ac();sfx.tap()}}
 function rnd(n){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}
 function quickPick(){const a=[...Array(MAXN)].map((_,i)=>i+1);for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a.slice(0,PICK).sort((x,y)=>x-y)}
