@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="light" style="color-scheme:light">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>樂透開獎</title>
 <meta name="description" content="手機連線樂透：選號投注，主持人開球，大家手機即時對獎">
@@ -168,35 +169,36 @@ function offerDemo(){
 }
 function showMsg(t,warn){const m=document.querySelector("#msg");m.hidden=!t;m.textContent=t||"";m.classList.toggle("warn",!!warn)}
 
-let MAXN=30,BR=0.058;const PICK=6,DRAW=6;
+let MAXN=20,BR=0.07,DRAW=10;const PICK=6;const DRAWS=[6,7,8,9,10];
 const DEF_TIERS=["頭獎","貳獎","參獎","普獎"];let TIERS=DEF_TIERS;
 const CFG_KEY="partylotto:cfg";let cfg=null;
-const RANGES=[25,30,35,38,42,49];
+const RANGES=[20,25,30,35,38,42,49];
 function loadCfg(key,def){try{const c=JSON.parse(store.get(key)||"null");return c&&typeof c==="object"?{...def,...c}:{...def}}catch(e){return {...def}}}
 function applyHeader(title,sub){$("#brand").textContent=title;$("#subt").textContent=sub;$("#subt").hidden=!sub;document.title=title}
 function closeCfg(){$("#settings").innerHTML=""}
-cfg=loadCfg(CFG_KEY,{title:"樂透開獎",sub:"",maxn:30,prizes:DEF_TIERS});
-function setRange(n){MAXN=RANGES.includes(n)?n:30;BR=MAXN<=30?0.058:MAXN<=38?0.052:0.045}
+cfg=loadCfg(CFG_KEY,{title:"樂透開獎",sub:"",maxn:20,draw:10,prizes:DEF_TIERS});
+function setRange(n,d){MAXN=RANGES.includes(n)?n:30;DRAW=DRAWS.includes(d)?d:6;BR=MAXN<=20?0.07:MAXN<=30?0.058:MAXN<=38?0.052:0.045}
 function hdr(){const t=game?.title||(isHost?cfg.title:"樂透開獎"),s0=game?(game.sub||""):(isHost?cfg.sub:"");
-  applyHeader(t,(s0?s0+"・":"")+`${MAXN} 選 6・中 3 個就有獎`)}
+  applyHeader(t,(s0?s0+"・":"")+`${MAXN} 選 6・開 ${DRAW} 顆・中 3 個就有獎`)}
 function openCfg(){
   const lv=["對中 6 個","對中 5 個","對中 4 個","對中 3 個"];
   $("#settings").innerHTML=`<form class="panel cfg" id="cfgf"><h2>遊戲設定</h2>
     <label>標題<input id="cTitle" maxlength="20" value="${esc(cfg.title)}"></label>
     <label>副標（可留空）<input id="cSub" maxlength="40" value="${esc(cfg.sub)}"></label>
-    <label>號碼範圍<select id="cMax">${RANGES.map(n=>`<option value="${n}" ${n===cfg.maxn?"selected":""}>1–${n}${n===30?"（建議，中獎人數多）":n===49?"（同大樂透，很難中）":""}</option>`).join("")}</select></label>
+    <label>號碼範圍<select id="cMax">${RANGES.map(n=>`<option value="${n}" ${n===cfg.maxn?"selected":""}>1–${n}${n===20?"（號碼少，中獎人數最多）":n===30?"（建議）":n===49?"（同大樂透，很難中）":""}</option>`).join("")}</select></label>
+    <label>每局開出幾顆球<select id="cDraw">${DRAWS.map(n=>`<option value="${n}" ${n===cfg.draw?"selected":""}>${n} 顆${n===6?"（標準）":""}</option>`).join("")}</select></label>
     ${lv.map((l,i)=>`<label>${l} 的獎項名稱<input id="cP${i}" maxlength="16" value="${esc(cfg.prizes[i]||DEF_TIERS[i])}"></label>`).join("")}
     <div class="sub" id="cInfo"></div>
     <div class="acts"><button class="btn-main" type="submit">儲存設定</button><button type="button" class="btn-ghost" id="cClose">關閉</button></div>
     <p class="sub" style="margin:0">設定存在這台裝置，按下一次「開放投注／新的一局」時套用到大家的畫面。</p></form>`;
   $("#cClose").addEventListener("click",closeCfg);
   $("#cfgf").addEventListener("submit",e=>{e.preventDefault();
-    cfg={title:$("#cTitle").value.trim()||"樂透開獎",sub:$("#cSub").value.trim(),maxn:+$("#cMax").value,
+    cfg={title:$("#cTitle").value.trim()||"樂透開獎",sub:$("#cSub").value.trim(),maxn:+$("#cMax").value,draw:+$("#cDraw").value,
       prizes:[0,1,2,3].map(i=>$("#cP"+i).value.trim()||DEF_TIERS[i])};
     store.set(CFG_KEY,JSON.stringify(cfg));
-    if(!game){$("#cInfo").innerHTML=`<b>已儲存</b>，按「開放投注」後套用。`;setRange(cfg.maxn);fillDrum([]);hdr();return}
+    if(!game){$("#cInfo").innerHTML=`<b>已儲存</b>，按「開放投注」後套用。`;setRange(cfg.maxn,cfg.draw);fillDrum([]);hdr();renderAll();return}
     const bet=players.filter(p=>p.round===game.round&&Array.isArray(p.picks)).length;
-    $("#cInfo").innerHTML=`<b>已儲存</b>，但目前這一局還是 1–${MAXN}。<br>${bet?`（本局已有 ${bet} 人投注，立即套用會清掉大家的號碼）<br>`:""}<button type="button" class="btn-main" id="cApply" style="margin-top:6px">立即套用（開新的一局）</button>`;
+    $("#cInfo").innerHTML=`<b>已儲存</b>，但目前這一局還是 1–${MAXN}、開 ${DRAW} 顆。<br>${bet?`（本局已有 ${bet} 人投注，立即套用會清掉大家的號碼）<br>`:""}<button type="button" class="btn-main" id="cApply" style="margin-top:6px">立即套用（開新的一局）</button>`;
     $("#cApply").addEventListener("click",()=>{confirmNew=false;openRound()});
   });
 }
@@ -318,7 +320,7 @@ function renderPanel(){
     const keepName=$("#nm")?.value??(tk?.name||store.get("partylotto:name")||"");
     el.innerHTML=`<form class="panel" id="betf"><h2>選 6 個號碼（1–${MAXN}）</h2>
       <input id="nm" maxlength="12" placeholder="你的名字" value="${esc(keepName)}" autocomplete="nickname" required aria-label="你的名字">
-      <div class="nums" style="grid-template-columns:repeat(${MAXN>42||MAXN%7===0?7:6},minmax(0,1fr))">${[...Array(MAXN)].map((_,i)=>`<button type="button" data-n="${i+1}" class="${picks.includes(i+1)?"on":""}" aria-pressed="${picks.includes(i+1)}">${pad(i+1)}</button>`).join("")}</div>
+      <div class="nums" style="grid-template-columns:repeat(${MAXN===20||MAXN===25?5:MAXN>42||MAXN%7===0?7:6},minmax(0,1fr))">${[...Array(MAXN)].map((_,i)=>`<button type="button" data-n="${i+1}" class="${picks.includes(i+1)?"on":""}" aria-pressed="${picks.includes(i+1)}">${pad(i+1)}</button>`).join("")}</div>
       <div class="acts"><button type="button" class="btn-ghost" id="qp">電腦選號</button><button type="button" class="btn-ghost" id="clr">清除</button>
       <button type="submit" class="btn-main grow" ${picks.length===PICK?"":"disabled"}>送出投注（${picks.length}/6）</button></div></form>`;
     el.querySelectorAll(".nums button").forEach(b=>b.addEventListener("click",()=>{const n=+b.dataset.n;
@@ -388,7 +390,7 @@ async function writeGame(next){
   if(await pub(TOPIC,next))onGame(next);else showMsg("沒送出去，網路不穩，請再按一次。",true);
   busy=false;renderHost();
 }
-function openRound(){closeCfg();writeGame({round:"r"+Date.now(),phase:"betting",balls:[],startedAt:Date.now(),title:cfg.title,sub:cfg.sub,maxn:cfg.maxn,prizes:cfg.prizes})}
+function openRound(){closeCfg();writeGame({round:"r"+Date.now(),phase:"betting",balls:[],startedAt:Date.now(),title:cfg.title,sub:cfg.sub,maxn:cfg.maxn,draw:cfg.draw,prizes:cfg.prizes})}
 function drawBall1(){const b=game.balls||[];if(b.length>=DRAW||animating)return;
   const left=[...Array(MAXN)].map((_,i)=>i+1).filter(n=>!b.includes(n));
   const nb=b.concat(left[rnd(left.length)]);writeGame({...game,balls:nb,phase:nb.length>=DRAW?"done":"drawing"})}
@@ -401,7 +403,7 @@ async function submitBet(name){
 }
 
 /* ---------- boot ---------- */
-if(isHost)setRange(cfg.maxn);readColors();sizeCanvas();fillDrum([]);requestAnimationFrame(frame);renderAll();
+if(isHost)setRange(cfg.maxn,cfg.draw);readColors();sizeCanvas();fillDrum([]);requestAnimationFrame(frame);renderAll();
 addEventListener("resize",sizeCanvas);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change",readColors);
 new MutationObserver(readColors).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
@@ -410,7 +412,7 @@ let rq=0;function schedule(){if(!rq)rq=requestAnimationFrame(()=>{rq=0;renderAll
 function onGame(d){
   if(!Array.isArray(d.balls)||typeof d.phase!=="string")return;if(game&&d.t<game.t)return;
   const prevRound=game?.round;game=d;
-  setRange(+d.maxn||30);TIERS=Array.isArray(d.prizes)&&d.prizes.length===4?d.prizes.map(String):DEF_TIERS;
+  setRange(+d.maxn||30,+d.draw||6);TIERS=Array.isArray(d.prizes)&&d.prizes.length===4?d.prizes.map(String):DEF_TIERS;
   if(game.round!==prevRound){picks=[];editing=false;confirmClose=confirmNew=confirmEnd=moreOpen=false}
   syncDrum();schedule();
 }
