@@ -194,8 +194,10 @@ function openCfg(){
     cfg={title:$("#cTitle").value.trim()||"樂透開獎",sub:$("#cSub").value.trim(),maxn:+$("#cMax").value,
       prizes:[0,1,2,3].map(i=>$("#cP"+i).value.trim()||DEF_TIERS[i])};
     store.set(CFG_KEY,JSON.stringify(cfg));
-    $("#cInfo").innerHTML=`<b>已儲存</b>，按「${game?"新的一局":"開放投注"}」後套用。`;
-    if(!game){setRange(cfg.maxn);fillDrum([]);hdr()}
+    if(!game){$("#cInfo").innerHTML=`<b>已儲存</b>，按「開放投注」後套用。`;setRange(cfg.maxn);fillDrum([]);hdr();return}
+    const bet=players.filter(p=>p.round===game.round&&Array.isArray(p.picks)).length;
+    $("#cInfo").innerHTML=`<b>已儲存</b>，但目前這一局還是 1–${MAXN}。<br>${bet?`（本局已有 ${bet} 人投注，立即套用會清掉大家的號碼）<br>`:""}<button type="button" class="btn-main" id="cApply" style="margin-top:6px">立即套用（開新的一局）</button>`;
+    $("#cApply").addEventListener("click",()=>{confirmNew=false;openRound()});
   });
 }
 const $=s=>document.querySelector(s);
